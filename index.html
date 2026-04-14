@@ -732,22 +732,69 @@
       if (file) processFile(file);
     });
 
-    async function processFile(file) {
-      if (!file.name.endsWith('.csv') && !file.name.endsWith('.xlsx')) {
-        showToast('Please upload a CSV or Excel file', true);
-        return;
+    async function processFile(file) {                                                  
+        if (!file.name.endsWith('.csv') && !file.name.endsWith('.xlsx')) {            
+          showToast('Please upload a CSV or Excel file', true);
+          return;
+        }
+
+        showToast('Processing file...');
+
+        const reader = new FileReader();
+        reader.onload = async e => {
+          const data = parseCSV(e.target.result);
+          displayResults(data, file.name);
+          await saveToHistory(file.name, data);
+        };
+        reader.readAsText(file);
       }
 
-      showToast('Processing file...');
+  Replace it with:
+  async function processFile(file) {
+        if (!file.name.endsWith('.csv') && !file.name.endsWith('.xlsx')) {
+          showToast('Please upload a CSV or Excel file', true);
+          return;
+        }
 
-      const reader = new FileReader();
-      reader.onload = async e => {
-        const data = parseCSV(e.target.result);
-        displayResults(data, file.name);
-        await saveToHistory(file.name, data);
-      };
-      reader.readAsText(file);
-    }
+        showToast('Processing file...');
+
+        const reader = new FileReader();
+        reader.onload = async e => {
+          const data = parseCSV(e.target.result);
+          displayResults(data, file.name);
+          await saveToHistory(file.name, data);
+
+          // Send to webhook
+          if (N8N_WEBHOOK_URL && N8N_WEBHOOK_URL !== 'YOUR_N8N_WEBHOOK_URL') {
+            try {
+              const avgValues = Object.entries(data.stats).map(([k, v]) => `${k}:
+  ${v.avg}`).join(', ');
+
+              await fetch(N8N_WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  timestamp: new Date().toISOString(),
+                  username: currentUser?.name || 'User',
+                  email: currentUser?.email || 'user@email.com',
+                  filename: file.name,
+                  rowcount: data.rowCount,
+                  columns: data.columns.join(', '),
+                  avgvalues: avgValues
+                })
+              });
+              showToast('Report sent successfully!');
+            } catch (err) {
+              console.error('Webhook error:', err);
+              showToast('Saved locally (webhook failed)', true);
+            }
+          } else {
+            showToast('Webhook not configured - saved locally', true);
+          }
+        };
+        reader.readAsText(file);
+      }
+
 
     function parseCSV(text) {
       const lines = text.trim().split('\n');
